@@ -48,9 +48,29 @@ func TestHandleCleaned(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("写入 cleaned 数据失败: %v", err)
 	}
+	if _, err := db.Exec(`
+INSERT INTO contents (
+	source, query_text, rss_title, rss_link, rss_source_site, url_hash, title_hash, content_hash,
+	final_url, canonical_url, status
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`,
+		"google_news",
+		"Anthropic when:1d",
+		"未清洗标题",
+		"https://news.google.com/test-2",
+		"Example",
+		"urlhash-2",
+		"titlehash-2",
+		"seedhash-2",
+		"https://example.com/article-2",
+		"https://example.com/article-2",
+		"extracted",
+	); err != nil {
+		t.Fatalf("写入非 cleaned 数据失败: %v", err)
+	}
 
 	server := NewServer(db)
-	req := httptest.NewRequest(http.MethodGet, "/api/cleaned?limit=10", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/cleaned?limit=1", nil)
 	recorder := httptest.NewRecorder()
 
 	server.Handler().ServeHTTP(recorder, req)
@@ -58,18 +78,27 @@ func TestHandleCleaned(t *testing.T) {
 		t.Fatalf("状态码错误: %d", recorder.Code)
 	}
 
-	var items []cleanedItemResponse
-	if err := json.Unmarshal(recorder.Body.Bytes(), &items); err != nil {
+	var response cleanedListResponse
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("解析响应失败: %v", err)
 	}
-	if len(items) != 1 {
-		t.Fatalf("期望 1 条数据，实际为 %d", len(items))
+	if response.Source != "cleaned" {
+		t.Fatalf("来源错误: %s", response.Source)
 	}
-	if items[0].CleanedTitle != "测试标题" {
-		t.Fatalf("标题错误: %s", items[0].CleanedTitle)
+	if response.Limit != 1 {
+		t.Fatalf("limit 错误: %d", response.Limit)
 	}
-	if len(items[0].Tags) != 2 {
-		t.Fatalf("标签数量错误: %+v", items[0].Tags)
+	if response.Count != 1 {
+		t.Fatalf("期望 count=1，实际为 %d", response.Count)
+	}
+	if len(response.Items) != 1 {
+		t.Fatalf("期望 1 条数据，实际为 %d", len(response.Items))
+	}
+	if response.Items[0].CleanedTitle != "测试标题" {
+		t.Fatalf("标题错误: %s", response.Items[0].CleanedTitle)
+	}
+	if len(response.Items[0].Tags) != 2 {
+		t.Fatalf("标签数量错误: %+v", response.Items[0].Tags)
 	}
 }
 

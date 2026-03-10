@@ -261,7 +261,7 @@ func runServe(args []string) error {
 	fs.SetOutput(io.Discard)
 
 	configPath := fs.String("config", defaultConfigPath, "配置文件路径")
-	addr := fs.String("addr", ":8080", "监听地址")
+	addr := fs.String("addr", "", "监听地址，优先级高于配置文件")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("解析 serve 参数失败: %w", err)
 	}
@@ -277,8 +277,13 @@ func runServe(args []string) error {
 	}
 	defer db.Close()
 
-	fmt.Printf("前端页面已启动: %s\n", displayURL(*addr))
-	return webui.NewServer(db).Serve(*addr)
+	listenAddr := *addr
+	if listenAddr == "" {
+		listenAddr = cfg.ListenAddr()
+	}
+
+	fmt.Printf("前端页面已启动: %s\n", displayURL(listenAddr))
+	return webui.NewServer(db).Serve(listenAddr)
 }
 
 func displayURL(addr string) string {

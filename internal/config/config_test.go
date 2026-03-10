@@ -13,6 +13,7 @@ func TestLoadSQLiteConfig(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 	content := `{
 		"app": {"name": "auto-search", "env": "test"},
+		"web": {"host": "127.0.0.1", "port": 9090},
 		"database": {
 			"driver": "sqlite",
 			"mysql": {
@@ -41,5 +42,8 @@ func TestLoadSQLiteConfig(t *testing.T) {
 	}
 	if cfg.HTTP.TimeoutSeconds != 15 {
 		t.Fatalf("期望超时为 15，实际为 %d", cfg.HTTP.TimeoutSeconds)
+	}
+	if cfg.ListenAddr() != "127.0.0.1:9090" {
+		t.Fatalf("期望监听地址为 127.0.0.1:9090，实际为 %s", cfg.ListenAddr())
 	}
 }

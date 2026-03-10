@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	App      AppConfig      `json:"app"`
+	Web      WebConfig      `json:"web"`
 	Database DatabaseConfig `json:"database"`
 	HTTP     HTTPConfig     `json:"http"`
 	Defuddle DefuddleConfig `json:"defuddle"`
@@ -18,6 +19,11 @@ type Config struct {
 type AppConfig struct {
 	Name string `json:"name"`
 	Env  string `json:"env"`
+}
+
+type WebConfig struct {
+	Host string `json:"host"`
+	Port int    `json:"port"`
 }
 
 type DatabaseConfig struct {
@@ -89,6 +95,12 @@ func (c *Config) Validate() error {
 	if c.App.Env == "" {
 		c.App.Env = "local"
 	}
+	if c.Web.Host == "" {
+		c.Web.Host = "0.0.0.0"
+	}
+	if c.Web.Port <= 0 {
+		c.Web.Port = 8080
+	}
 	if c.HTTP.TimeoutSeconds <= 0 {
 		c.HTTP.TimeoutSeconds = 20
 	}
@@ -128,6 +140,10 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("不支持的数据库驱动: %s", c.Database.Driver)
 	}
+}
+
+func (c Config) ListenAddr() string {
+	return fmt.Sprintf("%s:%d", c.Web.Host, c.Web.Port)
 }
 
 func validateMySQL(cfg MySQLConfig) error {

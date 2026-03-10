@@ -112,12 +112,23 @@ go run ./cmd/auto-search serve -config configs/config.local.json -addr 127.0.0.1
 http://127.0.0.1:8080
 ```
 
+也可以直接在配置文件里设置监听地址：
+
+```json
+"web": {
+  "host": "127.0.0.1",
+  "port": 8080
+}
+```
+
+`serve` 默认读取配置里的 `web.host` 和 `web.port`，如果传了 `-addr`，则以命令行参数为准。
+
 ## 前端接口
 
 - `GET /`
   前端页面
 - `GET /api/cleaned?limit=200`
-  返回 cleaned 数据
+  返回 JSON 格式的 cleaned 数据，响应结构为 `{"source":"cleaned","limit":200,"count":3,"items":[...]}`，默认 `limit=200`，最大 `500`
 - `GET /healthz`
   健康检查
 
@@ -160,10 +171,11 @@ bash deploy.sh
 - `APP_DIR`
 - `GIT_BRANCH`
 - `CONFIG_PATH`
-- `LISTEN_ADDR`
 - `LOG_DIR`
 - `BIN_DIR`
 - `RUN_DIR`
+
+`deploy.sh` 的监听地址只读取配置文件里的 `web.host` 和 `web.port`；如果配置里没有，则默认使用 `0.0.0.0:8080`。
 
 ## 验证
 

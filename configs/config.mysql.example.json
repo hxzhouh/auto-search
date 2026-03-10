@@ -3,6 +3,10 @@
     "name": "auto-search",
     "env": "prod"
   },
+  "web": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
   "database": {
     "driver": "mysql",
     "mysql": {

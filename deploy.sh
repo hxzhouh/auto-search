@@ -5,7 +5,6 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 GIT_BRANCH="${GIT_BRANCH:-main}"
 CONFIG_PATH="${CONFIG_PATH:-configs/config.local.json}"
-LISTEN_ADDR="${LISTEN_ADDR:-127.0.0.1:8080}"
 BIN_DIR="${BIN_DIR:-bin}"
 RUN_DIR="${RUN_DIR:-run}"
 LOG_DIR="${LOG_DIR:-logs}"
@@ -14,6 +13,7 @@ GO_BIN="${GO_BIN:-go}"
 BUILD_OUTPUT="$BIN_DIR/$APP_NAME"
 PID_FILE="$RUN_DIR/$APP_NAME.pid"
 LOG_FILE="$LOG_DIR/$APP_NAME.log"
+RESOLVED_LISTEN_ADDR=""
 
 log() {
   printf '[deploy] %s\n' "$1"
@@ -24,6 +24,37 @@ require_cmd() {
     printf '[deploy] 缺少命令: %s\n' "$1" >&2
     exit 1
   fi
+}
+
+resolve_listen_addr() {
+  require_cmd python3
+
+  RESOLVED_LISTEN_ADDR="$(python3 - "$CONFIG_PATH" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as handle:
+    cfg = json.load(handle)
+
+web = cfg.get("web") or {}
+host = web.get("host") or "0.0.0.0"
+port = web.get("port") or 8080
+print(f"{host}:{port}")
+PY
+)"
+}
+
+display_addr() {
+  local addr="$1"
+  local host="${addr%:*}"
+  local port="${addr##*:}"
+
+  if [[ "$host" == "0.0.0.0" || -z "$host" ]]; then
+    host="127.0.0.1"
+  fi
+
+  printf '%s:%s' "$host" "$port"
 }
 
 stop_old_process() {
@@ -65,7 +96,7 @@ stop_old_process() {
 
 start_new_process() {
   log "后台启动服务"
-  nohup "$BUILD_OUTPUT" serve -config "$CONFIG_PATH" -addr "$LISTEN_ADDR" >>"$LOG_FILE" 2>&1 &
+  nohup "$BUILD_OUTPUT" serve -config "$CONFIG_PATH" -addr "$RESOLVED_LISTEN_ADDR" >>"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
   sleep 2
 
@@ -78,7 +109,7 @@ start_new_process() {
   fi
 
   log "启动成功 PID=$pid"
-  log "访问地址: http://$LISTEN_ADDR"
+  log "访问地址: http://$(display_addr "$RESOLVED_LISTEN_ADDR")"
 }
 
 main() {
@@ -93,6 +124,13 @@ main() {
     printf '[deploy] 当前目录不是 git 仓库: %s\n' "$APP_DIR" >&2
     exit 1
   fi
+
+  if [[ ! -f "$CONFIG_PATH" ]]; then
+    printf '[deploy] 配置文件不存在: %s\n' "$CONFIG_PATH" >&2
+    exit 1
+  fi
+
+  resolve_listen_addr
 
   log "更新代码分支: $GIT_BRANCH"
   git fetch origin "$GIT_BRANCH"

@@ -39,6 +39,13 @@ type cleanedItemResponse struct {
 	Tags             []content.TagInput `json:"tags"`
 }
 
+type cleanedListResponse struct {
+	Source string                `json:"source"`
+	Limit  int                   `json:"limit"`
+	Count  int                   `json:"count"`
+	Items  []cleanedItemResponse `json:"items"`
+}
+
 var pageTemplate = template.Must(template.New("cleaned").Parse(`<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -478,7 +485,8 @@ var pageTemplate = template.Must(template.New("cleaned").Parse(`<!DOCTYPE html>
         return;
       }
 
-      state.items = await response.json();
+      const payload = await response.json();
+      state.items = payload.items || [];
       renderFilters();
       filterItems();
     }
@@ -569,7 +577,14 @@ func (s *Server) handleCleaned(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(cleanedListResponse{
+		Source: "cleaned",
+		Limit:  limit,
+		Count:  len(response),
+		Items:  response,
+	}); err != nil {
+		http.Error(w, "编码 cleaned 数据失败", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
