@@ -15,6 +15,15 @@ PID_FILE="$RUN_DIR/$APP_NAME.pid"
 LOG_FILE="$LOG_DIR/$APP_NAME.log"
 RESOLVED_LISTEN_ADDR=""
 
+to_abs_path() {
+  local path="$1"
+  if [[ "$path" = /* ]]; then
+    printf '%s\n' "$path"
+    return
+  fi
+  printf '%s/%s\n' "$APP_DIR" "$path"
+}
+
 log() {
   printf '[deploy] %s\n' "$1"
 }
@@ -129,6 +138,8 @@ main() {
     printf '[deploy] 配置文件不存在: %s\n' "$CONFIG_PATH" >&2
     exit 1
   fi
+
+  CONFIG_PATH="$(to_abs_path "$CONFIG_PATH")"
 
   resolve_listen_addr
 
