@@ -1,0 +1,42 @@
+{
+  "app": {
+    "name": "auto-search",
+    "env": "local"
+  },
+  "database": {
+    "driver": "sqlite",
+    "mysql": {
+      "host": "127.0.0.1",
+      "port": 3306,
+      "user": "root",
+      "password": "your-mysql-password",
+      "database": "auto_search",
+      "params": "charset=utf8mb4&parseTime=true&loc=Asia%2FShanghai",
+      "max_open_conns": 10,
+      "max_idle_conns": 5,
+      "conn_max_lifetime_seconds": 300
+    },
+    "sqlite": {
+      "path": "./data/auto-search.db"
+    }
+  },
+  "http": {
+    "timeout_seconds": 20,
+    "user_agent": "auto-search/0.1",
+    "max_redirects": 10,
+    "request_interval_ms": 150
+  },
+  "defuddle": {
+    "base_url": "http://defuddle.md"
+  },
+  "ai": {
+    "provider": "nvidia",
+    "base_url": "https://integrate.api.nvidia.com/v1",
+    "api_key": "your-nvidia-api-key",
+    "model": "nvidia/nemotron-3-nano-30b-a3b",
+    "max_tokens": 1200,
+    "temperature": 0.1,
+    "rpm_limit": 40,
+    "timeout_seconds": 120
+  }
+}

@@ -1,0 +1,28 @@
+.DS_Store
+
+# Go 构建产物
+bin/
+dist/
+*.test
+*.out
+coverage.out
+
+# 运行时目录
+logs/
+run/
+
+# 本地数据
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# 本地配置
+configs/config.local.json
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+
