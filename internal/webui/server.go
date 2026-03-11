@@ -1,8 +1,10 @@
 package webui
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -514,13 +516,26 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-func (s *Server) Serve(addr string) error {
+func (s *Server) Serve(ctx context.Context, addr string) error {
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           s.Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	return server.ListenAndServe()
+
+	go func() {
+		<-ctx.Done()
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = server.Shutdown(shutdownCtx)
+	}()
+
+	err := server.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) && ctx.Err() != nil {
+		return nil
+	}
+	return err
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, _ *http.Request) {

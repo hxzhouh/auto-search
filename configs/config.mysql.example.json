@@ -7,6 +7,12 @@
     "host": "0.0.0.0",
     "port": 8080
   },
+  "scheduler": {
+    "discover_interval_minutes": 60,
+    "extract_batch_size": 1,
+    "clean_batch_size": 1,
+    "idle_wait_seconds": 10
+  },
   "database": {
     "driver": "mysql",
     "mysql": {

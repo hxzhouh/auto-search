@@ -8,12 +8,13 @@ import (
 )
 
 type Config struct {
-	App      AppConfig      `json:"app"`
-	Web      WebConfig      `json:"web"`
-	Database DatabaseConfig `json:"database"`
-	HTTP     HTTPConfig     `json:"http"`
-	Defuddle DefuddleConfig `json:"defuddle"`
-	AI       AIConfig       `json:"ai"`
+	App       AppConfig       `json:"app"`
+	Web       WebConfig       `json:"web"`
+	Scheduler SchedulerConfig `json:"scheduler"`
+	Database  DatabaseConfig  `json:"database"`
+	HTTP      HTTPConfig      `json:"http"`
+	Defuddle  DefuddleConfig  `json:"defuddle"`
+	AI        AIConfig        `json:"ai"`
 }
 
 type AppConfig struct {
@@ -24,6 +25,13 @@ type AppConfig struct {
 type WebConfig struct {
 	Host string `json:"host"`
 	Port int    `json:"port"`
+}
+
+type SchedulerConfig struct {
+	DiscoverIntervalMinutes int `json:"discover_interval_minutes"`
+	ExtractBatchSize        int `json:"extract_batch_size"`
+	CleanBatchSize          int `json:"clean_batch_size"`
+	IdleWaitSeconds         int `json:"idle_wait_seconds"`
 }
 
 type DatabaseConfig struct {
@@ -100,6 +108,18 @@ func (c *Config) Validate() error {
 	}
 	if c.Web.Port <= 0 {
 		c.Web.Port = 8080
+	}
+	if c.Scheduler.DiscoverIntervalMinutes <= 0 {
+		c.Scheduler.DiscoverIntervalMinutes = 60
+	}
+	if c.Scheduler.ExtractBatchSize <= 0 {
+		c.Scheduler.ExtractBatchSize = 1
+	}
+	if c.Scheduler.CleanBatchSize <= 0 {
+		c.Scheduler.CleanBatchSize = 1
+	}
+	if c.Scheduler.IdleWaitSeconds <= 0 {
+		c.Scheduler.IdleWaitSeconds = 10
 	}
 	if c.HTTP.TimeoutSeconds <= 0 {
 		c.HTTP.TimeoutSeconds = 20

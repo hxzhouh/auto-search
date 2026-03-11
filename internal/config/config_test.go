@@ -46,4 +46,16 @@ func TestLoadSQLiteConfig(t *testing.T) {
 	if cfg.ListenAddr() != "127.0.0.1:9090" {
 		t.Fatalf("期望监听地址为 127.0.0.1:9090，实际为 %s", cfg.ListenAddr())
 	}
+	if cfg.Scheduler.DiscoverIntervalMinutes != 60 {
+		t.Fatalf("期望 discover 默认间隔为 60，实际为 %d", cfg.Scheduler.DiscoverIntervalMinutes)
+	}
+	if cfg.Scheduler.ExtractBatchSize != 1 {
+		t.Fatalf("期望 extract 默认批次为 1，实际为 %d", cfg.Scheduler.ExtractBatchSize)
+	}
+	if cfg.Scheduler.CleanBatchSize != 1 {
+		t.Fatalf("期望 clean 默认批次为 1，实际为 %d", cfg.Scheduler.CleanBatchSize)
+	}
+	if cfg.Scheduler.IdleWaitSeconds != 10 {
+		t.Fatalf("期望 idle_wait 默认值为 10，实际为 %d", cfg.Scheduler.IdleWaitSeconds)
+	}
 }

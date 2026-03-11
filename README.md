@@ -13,6 +13,7 @@ Google News RSS
 -> 打分、打标签
 -> 写入 SQLite / MySQL
 -> 前端页面只展示 cleaned 数据
+-> `serve` 单进程后台调度
 ```
 
 ## 当前能力
@@ -22,7 +23,7 @@ Google News RSS
   - `discover run` 抓 RSS 并写入待处理内容
   - `extract run` 解析原站 URL，并通过 `http://defuddle.md/{url}` 提取正文
   - `clean run` 调用 AI 做清洗、分类、打分、标签化
-  - `serve` 提供前端页面和 `/api/cleaned` 接口
+  - `serve` 提供前端页面和 `/api/cleaned` 接口，同时后台串行调度 `discover/extract/clean`
 - 数据库：
   - 本地开发默认用 SQLite
   - 生产可切换到 MySQL
@@ -67,6 +68,14 @@ Google News RSS
   当前按 `40 RPM` 控速
 - `ai.timeout_seconds`
   AI 请求超时，当前默认 `120`
+- `scheduler.discover_interval_minutes`
+  `discover` 调度间隔，默认 `60`
+- `scheduler.extract_batch_size`
+  每轮 `extract` 批次，默认 `1`
+- `scheduler.clean_batch_size`
+  每轮 `clean` 批次，默认 `1`
+- `scheduler.idle_wait_seconds`
+  空闲轮询等待时间，默认 `10`
 
 ## 本地运行
 
@@ -82,25 +91,25 @@ go run ./cmd/auto-search migrate -config configs/config.local.json
 go run ./cmd/auto-search queries list -config configs/config.local.json
 ```
 
-### 3. 抓取新闻条目
+### 3. 手动抓取新闻条目
 
 ```bash
 go run ./cmd/auto-search discover run -config configs/config.local.json
 ```
 
-### 4. 提取正文
+### 4. 手动提取正文
 
 ```bash
 go run ./cmd/auto-search extract run -config configs/config.local.json -limit 20
 ```
 
-### 5. AI 清洗
+### 5. 手动 AI 清洗
 
 ```bash
 go run ./cmd/auto-search clean run -config configs/config.local.json -limit 10
 ```
 
-### 6. 启动前端页面
+### 6. 启动单进程服务
 
 ```bash
 go run ./cmd/auto-search serve -config configs/config.local.json -addr 127.0.0.1:8080
@@ -122,6 +131,13 @@ http://127.0.0.1:8080
 ```
 
 `serve` 默认读取配置里的 `web.host` 和 `web.port`，如果传了 `-addr`，则以命令行参数为准。
+
+启动后只有一个服务进程：
+
+- Web API 始终提供页面和 `/api/cleaned`
+- `discover` 每小时执行一次
+- `extract` 和 `clean` 按单线程串行循环持续运行
+- 默认批次都是 `1`，不会并发调用外部抓取和 AI
 
 ## 前端接口
 
@@ -156,6 +172,7 @@ http://127.0.0.1:8080
 ```text
 git pull
 -> go build
+-> migrate
 -> 停旧进程
 -> 后台启动 serve
 ```

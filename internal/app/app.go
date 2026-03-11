@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"auto-search/internal/cleaning"
@@ -15,6 +18,7 @@ import (
 	"auto-search/internal/discovery"
 	"auto-search/internal/extraction"
 	"auto-search/internal/query"
+	"auto-search/internal/scheduler"
 	"auto-search/internal/webui"
 )
 
@@ -282,8 +286,33 @@ func runServe(args []string) error {
 		listenAddr = cfg.ListenAddr()
 	}
 
+	discoverService := discovery.NewService(db, cfg)
+	extractService := extraction.NewService(db, cfg)
+	cleanService, err := cleaning.NewService(db, cfg)
+	if err != nil {
+		return err
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	loop := scheduler.NewLoop(cfg.Scheduler, discoverService, extractService, cleanService)
+	go func() {
+		err := loop.Run(ctx)
+		if err != nil && !errors.Is(err, context.Canceled) {
+			fmt.Printf("后台调度退出: %v\n", err)
+		}
+	}()
+
 	fmt.Printf("前端页面已启动: %s\n", displayURL(listenAddr))
-	return webui.NewServer(db).Serve(listenAddr)
+	fmt.Printf(
+		"后台调度已启动: discover=%d分钟 extract_batch=%d clean_batch=%d idle_wait=%d秒\n",
+		cfg.Scheduler.DiscoverIntervalMinutes,
+		cfg.Scheduler.ExtractBatchSize,
+		cfg.Scheduler.CleanBatchSize,
+		cfg.Scheduler.IdleWaitSeconds,
+	)
+	return webui.NewServer(db).Serve(ctx, listenAddr)
 }
 
 func displayURL(addr string) string {

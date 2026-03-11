@@ -157,6 +157,9 @@ main() {
   log "编译二进制"
   "$GO_BIN" build -o "$BUILD_OUTPUT" ./cmd/auto-search
 
+  log "执行数据库迁移"
+  "$BUILD_OUTPUT" migrate -config "$CONFIG_PATH"
+
   stop_old_process
   start_new_process
 }
