@@ -116,6 +116,18 @@ func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
 }
 
+func (r *Repository) ResetFailedToPending(ctx context.Context) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `
+UPDATE contents SET status = 'pending', updated_at = ? WHERE status = 'extract_failed'`,
+		time.Now(),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("重置失败记录失败: %w", err)
+	}
+
+	return result.RowsAffected()
+}
+
 func (r *Repository) CountByStatus(ctx context.Context) ([]StatusCount, error) {
 	rows, err := r.db.QueryContext(ctx, `
 SELECT status, COUNT(*) FROM contents GROUP BY status ORDER BY status ASC`)

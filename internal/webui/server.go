@@ -519,6 +519,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/admin", s.handleAdminIndex)
 	mux.HandleFunc("/api/cleaned", s.handleCleaned)
 	mux.HandleFunc("GET /api/admin/stats", s.handleAdminStats)
+	mux.HandleFunc("POST /api/admin/reset-failed", s.handleAdminResetFailed)
 	mux.HandleFunc("GET /api/admin/queries", s.handleAdminListQueries)
 	mux.HandleFunc("POST /api/admin/queries", s.handleAdminCreateQuery)
 	mux.HandleFunc("PATCH /api/admin/queries/{id}", s.handleAdminUpdateQuery)
@@ -699,7 +700,10 @@ var adminTemplate = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
     <section class="stats" id="stats">
       <div class="stat"><label>待抓取</label><strong id="s-pending">-</strong></div>
       <div class="stat"><label>已抓取</label><strong id="s-extracted">-</strong></div>
-      <div class="stat"><label>抓取失败</label><strong id="s-extract-failed">-</strong></div>
+      <div class="stat" style="position:relative">
+        <label>抓取失败</label><strong id="s-extract-failed">-</strong>
+        <button class="btn btn-sm" style="position:absolute;top:14px;right:14px;font-size:11px" onclick="resetFailed()">重置</button>
+      </div>
       <div class="stat"><label>已清洗</label><strong id="s-cleaned">-</strong></div>
       <div class="stat"><label>总数</label><strong id="s-total">-</strong></div>
     </section>
@@ -866,6 +870,16 @@ var adminTemplate = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
       loadQueries();
     }
 
+    async function resetFailed() {
+      const count = parseInt(document.getElementById('s-extract-failed').textContent, 10) || 0;
+      if (!confirm('将 ' + count + ' 条抓取失败记录重置为待抓取？')) return;
+      const res = await fetch('/api/admin/reset-failed', { method: 'POST' });
+      if (!res.ok) { alert('重置失败: ' + await res.text()); return; }
+      const data = await res.json();
+      alert('已重置 ' + data.reset + ' 条记录');
+      loadStats();
+    }
+
     loadStats();
     loadQueries();
   </script>
@@ -877,6 +891,17 @@ func (s *Server) handleAdminIndex(w http.ResponseWriter, _ *http.Request) {
 	if err := adminTemplate.Execute(w, nil); err != nil {
 		http.Error(w, "渲染后台页面失败", http.StatusInternalServerError)
 	}
+}
+
+func (s *Server) handleAdminResetFailed(w http.ResponseWriter, r *http.Request) {
+	n, err := s.repo.ResetFailedToPending(r.Context())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("重置失败: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(map[string]any{"reset": n})
 }
 
 func (s *Server) handleAdminStats(w http.ResponseWriter, r *http.Request) {
