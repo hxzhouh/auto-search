@@ -103,12 +103,37 @@ type CleaningUpdate struct {
 	Tags             []TagInput
 }
 
+type StatusCount struct {
+	Status string
+	Count  int
+}
+
 type Repository struct {
 	db *sql.DB
 }
 
 func NewRepository(db *sql.DB) *Repository {
 	return &Repository{db: db}
+}
+
+func (r *Repository) CountByStatus(ctx context.Context) ([]StatusCount, error) {
+	rows, err := r.db.QueryContext(ctx, `
+SELECT status, COUNT(*) FROM contents GROUP BY status ORDER BY status ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("统计状态失败: %w", err)
+	}
+	defer rows.Close()
+
+	items := make([]StatusCount, 0)
+	for rows.Next() {
+		var item StatusCount
+		if err := rows.Scan(&item.Status, &item.Count); err != nil {
+			return nil, fmt.Errorf("扫描状态统计失败: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	return items, rows.Err()
 }
 
 func (r *Repository) ExistsByURLHash(ctx context.Context, hash string) (bool, error) {
