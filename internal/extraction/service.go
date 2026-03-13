@@ -70,6 +70,12 @@ func (s *Service) Run(ctx context.Context, limit int) (Stats, error) {
 		article, err := s.extractor.Extract(ctx, targetURL)
 		if err != nil {
 			stats.Failed++
+			_ = s.contentRepo.UpdateExtractionResult(ctx, content.ExtractionUpdate{
+				ID:           item.ID,
+				FinalURL:     resolvedFinalURL,
+				CanonicalURL: resolvedCanonicalURL,
+				Status:       "extract_failed",
+			})
 			continue
 		}
 
