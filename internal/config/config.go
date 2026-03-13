@@ -64,7 +64,7 @@ type HTTPConfig struct {
 }
 
 type DefuddleConfig struct {
-	BaseURL string `json:"base_url"`
+	Bin string `json:"bin"` // defuddle 可执行文件路径，例如 /usr/bin/defuddle
 }
 
 type AIConfig struct {
@@ -133,8 +133,8 @@ func (c *Config) Validate() error {
 	if c.HTTP.RequestIntervalMS < 0 {
 		c.HTTP.RequestIntervalMS = 0
 	}
-	if c.Defuddle.BaseURL == "" {
-		c.Defuddle.BaseURL = "http://defuddle.md"
+	if c.Defuddle.Bin == "" {
+		c.Defuddle.Bin = "/usr/bin/defuddle"
 	}
 	if c.AI.MaxTokens <= 0 {
 		c.AI.MaxTokens = 1200
