@@ -77,16 +77,7 @@ func buildDefuddleURL(baseURL, targetURL string) (string, error) {
 		return "", fmt.Errorf("目标 URL 缺少 host: %s", targetURL)
 	}
 
-	trimmed := parsed.Host
-	if parsed.Path != "" {
-		trimmed += parsed.EscapedPath()
-	}
-
-	requestURL := baseURL + "/" + strings.TrimLeft(trimmed, "/")
-	if parsed.RawQuery != "" {
-		requestURL += "?" + parsed.RawQuery
-	}
-	return requestURL, nil
+	return baseURL + "/" + targetURL, nil
 }
 
 func parseMarkdownDocument(raw string) (Article, error) {
