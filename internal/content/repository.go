@@ -486,7 +486,7 @@ SELECT
 	updated_at
 FROM contents
 WHERE status = 'cleaned' AND writeworthy_score >= 7 AND hidden = 0
-ORDER BY updated_at DESC, id DESC
+ORDER BY rss_published_at DESC, updated_at DESC, id DESC
 `
 
 	sqlText := baseSQL
