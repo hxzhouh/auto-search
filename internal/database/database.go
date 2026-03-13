@@ -88,6 +88,14 @@ func openSQLite(cfg config.SQLiteConfig) (*sql.DB, error) {
 }
 
 func RunMigrations(ctx context.Context, db *sql.DB, driver string) error {
+	if _, err := db.ExecContext(ctx, `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+	version TEXT NOT NULL PRIMARY KEY,
+	applied_at DATETIME NOT NULL
+)`); err != nil {
+		return fmt.Errorf("创建迁移记录表失败: %w", err)
+	}
+
 	dir, err := resolveMigrationsDir(driver)
 	if err != nil {
 		return err
@@ -108,6 +116,12 @@ func RunMigrations(ctx context.Context, db *sql.DB, driver string) error {
 	slices.Sort(names)
 
 	for _, name := range names {
+		var applied int
+		_ = db.QueryRowContext(ctx, `SELECT 1 FROM schema_migrations WHERE version = ?`, name).Scan(&applied)
+		if applied == 1 {
+			continue
+		}
+
 		path := filepath.Join(dir, name)
 		sqlText, err := os.ReadFile(path)
 		if err != nil {
@@ -119,6 +133,13 @@ func RunMigrations(ctx context.Context, db *sql.DB, driver string) error {
 			if _, err := db.ExecContext(ctx, stmt); err != nil {
 				return fmt.Errorf("执行迁移失败: %s: %w", path, err)
 			}
+		}
+
+		if _, err := db.ExecContext(ctx,
+			`INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)`,
+			name, time.Now(),
+		); err != nil {
+			return fmt.Errorf("记录迁移版本失败: %s: %w", name, err)
 		}
 	}
 

@@ -70,7 +70,7 @@ INSERT INTO contents (
 	}
 
 	server := NewServer(db)
-	req := httptest.NewRequest(http.MethodGet, "/api/cleaned?limit=1", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/cleaned?page=1", nil)
 	recorder := httptest.NewRecorder()
 
 	server.Handler().ServeHTTP(recorder, req)
@@ -82,11 +82,14 @@ INSERT INTO contents (
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatalf("解析响应失败: %v", err)
 	}
-	if response.Source != "cleaned" {
-		t.Fatalf("来源错误: %s", response.Source)
+	if response.Page != 1 {
+		t.Fatalf("page 错误: %d", response.Page)
 	}
-	if response.Limit != 1 {
-		t.Fatalf("limit 错误: %d", response.Limit)
+	if response.PerPage != defaultPerPage {
+		t.Fatalf("per_page 错误: %d", response.PerPage)
+	}
+	if response.Total != 1 {
+		t.Fatalf("期望 total=1，实际为 %d", response.Total)
 	}
 	if response.Count != 1 {
 		t.Fatalf("期望 count=1，实际为 %d", response.Count)

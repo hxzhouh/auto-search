@@ -44,10 +44,12 @@ type cleanedItemResponse struct {
 }
 
 type cleanedListResponse struct {
-	Source string                `json:"source"`
-	Limit  int                   `json:"limit"`
-	Count  int                   `json:"count"`
-	Items  []cleanedItemResponse `json:"items"`
+	Page       int                   `json:"page"`
+	PerPage    int                   `json:"per_page"`
+	Total      int                   `json:"total"`
+	TotalPages int                   `json:"total_pages"`
+	Count      int                   `json:"count"`
+	Items      []cleanedItemResponse `json:"items"`
 }
 
 var pageTemplate = template.Must(template.New("cleaned").Parse(`<!DOCTYPE html>
@@ -303,6 +305,11 @@ var pageTemplate = template.Must(template.New("cleaned").Parse(`<!DOCTYPE html>
       border-radius: 24px;
       background: rgba(255, 253, 247, 0.6);
     }
+    .pager-inner { display:flex; align-items:center; justify-content:center; gap:16px; }
+    .pager-btn { border:1px solid var(--line); background:rgba(255,253,247,.84); border-radius:14px; padding:10px 20px; font:inherit; font-size:14px; cursor:pointer; color:var(--ink); }
+    .pager-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+    .pager-btn:disabled { opacity:.4; cursor:default; }
+    .pager-info { font-size:14px; color:var(--muted); }
     @keyframes rise {
       to {
         opacity: 1;
@@ -358,13 +365,11 @@ var pageTemplate = template.Must(template.New("cleaned").Parse(`<!DOCTYPE html>
     </section>
 
     <section id="list" class="list"></section>
+    <div id="pager" style="margin-top:28px"></div>
   </div>
 
   <script>
-    const state = {
-      items: [],
-      filtered: []
-    };
+    const state = { items: [], page: 1, totalPages: 1, total: 0 };
 
     const searchInput = document.getElementById('search');
     const typeFilter = document.getElementById('type-filter');
@@ -373,97 +378,94 @@ var pageTemplate = template.Must(template.New("cleaned").Parse(`<!DOCTYPE html>
     const metricCount = document.getElementById('metric-count');
     const metricWorth = document.getElementById('metric-worth');
 
-    function scoreTone(value) {
-      if (value >= 8) return '高';
-      if (value >= 6) return '中';
-      return '低';
-    }
+    function scoreTone(v) { return v >= 8 ? '高' : v >= 6 ? '中' : '低'; }
 
     function formatTime(value) {
       if (!value) return '未知时间';
-      const date = new Date(value);
-      if (Number.isNaN(date.getTime())) return value;
-      return date.toLocaleString('zh-CN', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return value;
+      return d.toLocaleString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
     }
 
-    function uniqueValues(key) {
-      return [...new Set(state.items.map(item => item[key]).filter(Boolean))].sort();
+    function esc(s) {
+      return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     }
 
     function renderFilters() {
-      const types = uniqueValues('content_type');
-      const langs = uniqueValues('language');
-
-      typeFilter.innerHTML = '<option value="">全部类型</option>' + types.map(value => '<option value="' + value + '">' + value + '</option>').join('');
-      langFilter.innerHTML = '<option value="">全部语言</option>' + langs.map(value => '<option value="' + value + '">' + value + '</option>').join('');
+      const types = [...new Set(state.items.map(i => i.content_type).filter(Boolean))].sort();
+      const langs = [...new Set(state.items.map(i => i.language).filter(Boolean))].sort();
+      const cur = { type: typeFilter.value, lang: langFilter.value };
+      typeFilter.innerHTML = '<option value="">全部类型</option>' + types.map(v => '<option' + (cur.type===v?' selected':'') + '>' + v + '</option>').join('');
+      langFilter.innerHTML = '<option value="">全部语言</option>' + langs.map(v => '<option' + (cur.lang===v?' selected':'') + '>' + v + '</option>').join('');
     }
 
-    function filterItems() {
-      const keyword = searchInput.value.trim().toLowerCase();
+    function filteredItems() {
+      const kw = searchInput.value.trim().toLowerCase();
       const type = typeFilter.value;
       const lang = langFilter.value;
-
-      state.filtered = state.items.filter(item => {
-        const haystack = [
-          item.cleaned_title,
-          item.cleaned_summary,
-          item.cleaned_content,
-          item.angle_hint,
-          item.ai_reason,
-          ...(item.tags || []).map(tag => tag.name)
-        ].join(' ').toLowerCase();
-
-        if (keyword && !haystack.includes(keyword)) return false;
+      return state.items.filter(item => {
         if (type && item.content_type !== type) return false;
         if (lang && item.language !== lang) return false;
+        if (kw) {
+          const hay = [item.cleaned_title, item.cleaned_summary, item.angle_hint, ...(item.tags||[]).map(t=>t.name)].join(' ').toLowerCase();
+          if (!hay.includes(kw)) return false;
+        }
         return true;
       });
-
-      renderList();
     }
 
-    function toggleCard(id) {
-      const node = document.getElementById('card-' + id);
-      if (!node) return;
-      node.classList.toggle('open');
+    function renderPagination() {
+      const pager = document.getElementById('pager');
+      if (state.totalPages <= 1) { pager.innerHTML = ''; return; }
+      let html = '<div class="pager-inner">';
+      html += '<button class="pager-btn" onclick="goPage(' + (state.page-1) + ')"' + (state.page<=1?' disabled':'') + '>← 上一页</button>';
+      html += '<span class="pager-info">第 ' + state.page + ' / ' + state.totalPages + ' 页，共 ' + state.total + ' 条</span>';
+      html += '<button class="pager-btn" onclick="goPage(' + (state.page+1) + ')"' + (state.page>=state.totalPages?' disabled':'') + '>下一页 →</button>';
+      html += '</div>';
+      pager.innerHTML = html;
+    }
+
+    function goPage(p) {
+      if (p < 1 || p > state.totalPages) return;
+      load(p);
+    }
+
+    function toggleCard(id) { document.getElementById('card-' + id)?.classList.toggle('open'); }
+
+    async function hideCard(id) {
+      const res = await fetch('/api/content/' + id + '/hide', { method: 'POST' });
+      if (!res.ok) { alert('隐藏失败'); return; }
+      const card = document.getElementById('card-' + id);
+      if (card) { card.style.transition = 'opacity .3s'; card.style.opacity = '0'; setTimeout(() => card.remove(), 300); }
+      state.total = Math.max(0, state.total - 1);
+      renderPagination();
     }
 
     function renderList() {
-      metricCount.textContent = String(state.filtered.length);
-      metricWorth.textContent = String(state.filtered.filter(item => item.writeworthy_score >= 7).length);
+      const items = filteredItems();
+      metricCount.textContent = String(state.total);
+      metricWorth.textContent = String(items.length);
 
-      if (!state.filtered.length) {
+      if (!items.length) {
         listNode.innerHTML = '<div class="empty">当前没有符合条件的已清洗数据。</div>';
         return;
       }
 
-      listNode.innerHTML = state.filtered.map((item, index) => {
-        const tags = (item.tags || []).map(tag => '<span class="chip">' + tag.category + ' · ' + tag.name + '</span>').join('');
-        const content = (item.cleaned_content || '').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
-        const summary = (item.cleaned_summary || '').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
-        const title = (item.cleaned_title || item.rss_title || '').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
-        const angle = (item.angle_hint || '未提供角度').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
-        const reason = (item.ai_reason || '未提供原因').replace(/[&<>]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch]));
-
-        return '<article class="card" id="card-' + item.id + '" style="animation-delay:' + (index * 40) + 'ms">' +
+      listNode.innerHTML = items.map((item, index) => {
+        const tags = (item.tags||[]).map(t => '<span class="chip">' + esc(t.category) + ' · ' + esc(t.name) + '</span>').join('');
+        return '<article class="card" id="card-' + item.id + '" style="animation-delay:' + (index*40) + 'ms">' +
           '<div class="card-head">' +
-            '<div><h2>' + title + '</h2></div>' +
+            '<div><h2>' + esc(item.cleaned_title || item.rss_title) + '</h2></div>' +
             '<div class="meta">' +
-              '<div>' + (item.rss_source_site || '未知来源') + '</div>' +
+              '<div>' + esc(item.rss_source_site || '未知来源') + '</div>' +
               '<div>' + formatTime(item.rss_published_at || item.updated_at) + '</div>' +
-              '<div>' + (item.language || 'unknown') + ' / ' + (item.content_type || 'unknown') + '</div>' +
+              '<div>' + esc(item.language||'?') + ' / ' + esc(item.content_type||'?') + '</div>' +
             '</div>' +
           '</div>' +
-          '<p class="summary">' + summary + '</p>' +
+          '<p class="summary">' + esc(item.cleaned_summary) + '</p>' +
           '<div class="chips">' +
-            '<span class="chip">角度 · ' + angle + '</span>' +
-            '<span class="chip">相关性 · ' + (item.is_relevant ? '是' : '否') + '</span>' +
+            '<span class="chip">角度 · ' + esc(item.angle_hint||'未提供') + '</span>' +
+            '<span class="chip">相关性 · ' + (item.is_relevant?'是':'否') + '</span>' +
             tags +
           '</div>' +
           '<div class="grid">' +
@@ -472,36 +474,38 @@ var pageTemplate = template.Must(template.New("cleaned").Parse(`<!DOCTYPE html>
             '<div class="score"><label>质量</label><strong>' + item.quality_score + '</strong></div>' +
             '<div class="score"><label>评级</label><strong>' + scoreTone(item.writeworthy_score) + '</strong></div>' +
           '</div>' +
-          '<div class="chips"><span class="chip">判断 · ' + reason + '</span></div>' +
+          '<div class="chips"><span class="chip">判断 · ' + esc(item.ai_reason||'未提供') + '</span></div>' +
           '<div class="actions">' +
-            '<button class="toggle" onclick="toggleCard(' + item.id + ')">展开 / 收起正文</button>' +
-            '<a class="link" href="' + (item.canonical_url || item.final_url || '#') + '" target="_blank" rel="noreferrer">打开原文</a>' +
+            '<div style="display:flex;gap:12px">' +
+              '<button class="toggle" onclick="toggleCard(' + item.id + ')">展开 / 收起正文</button>' +
+              '<button class="toggle" style="color:#999" onclick="hideCard(' + item.id + ')">隐藏</button>' +
+            '</div>' +
+            '<a class="link" href="' + esc(item.canonical_url||item.final_url||'#') + '" target="_blank" rel="noreferrer">打开原文</a>' +
           '</div>' +
-          '<div class="body">' + content + '</div>' +
+          '<div class="body">' + esc(item.cleaned_content) + '</div>' +
         '</article>';
       }).join('');
     }
 
-    async function load() {
-      const response = await fetch('/api/cleaned?limit=200');
-      if (!response.ok) {
-        listNode.innerHTML = '<div class="empty">加载失败：' + response.status + '</div>';
-        return;
-      }
-
-      const payload = await response.json();
+    async function load(page) {
+      page = page || 1;
+      const res = await fetch('/api/cleaned?page=' + page);
+      if (!res.ok) { listNode.innerHTML = '<div class="empty">加载失败：' + res.status + '</div>'; return; }
+      const payload = await res.json();
       state.items = payload.items || [];
+      state.page = payload.page || 1;
+      state.totalPages = payload.total_pages || 1;
+      state.total = payload.total || 0;
       renderFilters();
-      filterItems();
+      renderList();
+      renderPagination();
     }
 
-    searchInput.addEventListener('input', filterItems);
-    typeFilter.addEventListener('change', filterItems);
-    langFilter.addEventListener('change', filterItems);
+    searchInput.addEventListener('input', renderList);
+    typeFilter.addEventListener('change', renderList);
+    langFilter.addEventListener('change', renderList);
 
-    load().catch(error => {
-      listNode.innerHTML = '<div class="empty">加载失败：' + error.message + '</div>';
-    });
+    load(1).catch(err => { listNode.innerHTML = '<div class="empty">加载失败：' + err.message + '</div>'; });
   </script>
 </body>
 </html>`))
@@ -518,6 +522,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/admin", s.handleAdminIndex)
 	mux.HandleFunc("/api/cleaned", s.handleCleaned)
+	mux.HandleFunc("POST /api/content/{id}/hide", s.handleHideContent)
 	mux.HandleFunc("GET /api/admin/stats", s.handleAdminStats)
 	mux.HandleFunc("POST /api/admin/reset-failed", s.handleAdminResetFailed)
 	mux.HandleFunc("GET /api/admin/queries", s.handleAdminListQueries)
@@ -557,24 +562,34 @@ func (s *Server) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+const defaultPerPage = 20
+
 func (s *Server) handleCleaned(w http.ResponseWriter, r *http.Request) {
-	limit := 200
-	if raw := r.URL.Query().Get("limit"); raw != "" {
+	page := 1
+	if raw := r.URL.Query().Get("page"); raw != "" {
 		parsed, err := strconv.Atoi(raw)
-		if err != nil || parsed <= 0 {
-			http.Error(w, "limit 参数不合法", http.StatusBadRequest)
+		if err != nil || parsed < 1 {
+			http.Error(w, "page 参数不合法", http.StatusBadRequest)
 			return
 		}
-		if parsed > 500 {
-			parsed = 500
-		}
-		limit = parsed
+		page = parsed
 	}
 
-	items, err := s.repo.ListCleaned(r.Context(), limit)
+	total, err := s.repo.CountVisible(r.Context())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("统计数据失败: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	items, err := s.repo.ListCleaned(r.Context(), page, defaultPerPage)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("读取 cleaned 数据失败: %v", err), http.StatusInternalServerError)
 		return
+	}
+
+	totalPages := total / defaultPerPage
+	if total%defaultPerPage != 0 {
+		totalPages++
 	}
 
 	response := make([]cleanedItemResponse, 0, len(items))
@@ -605,13 +620,30 @@ func (s *Server) handleCleaned(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	if err := json.NewEncoder(w).Encode(cleanedListResponse{
-		Source: "cleaned",
-		Limit:  limit,
-		Count:  len(response),
-		Items:  response,
+		Page:       page,
+		PerPage:    defaultPerPage,
+		Total:      total,
+		TotalPages: totalPages,
+		Count:      len(response),
+		Items:      response,
 	}); err != nil {
 		http.Error(w, "编码 cleaned 数据失败", http.StatusInternalServerError)
 	}
+}
+
+func (s *Server) handleHideContent(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		http.Error(w, "id 不合法", http.StatusBadRequest)
+		return
+	}
+
+	if err := s.repo.HideContent(r.Context(), id); err != nil {
+		http.Error(w, fmt.Sprintf("隐藏失败: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
@@ -790,10 +822,13 @@ var adminTemplate = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
       document.getElementById('s-total').textContent = total;
     }
 
+    const queryMap = {};
+
     async function loadQueries() {
       const res = await fetch('/api/admin/queries');
       if (!res.ok) return;
       const data = await res.json();
+      for (const q of (data.items || [])) queryMap[q.id] = q;
       const tbody = document.getElementById('queries-body');
       tbody.innerHTML = (data.items || []).map(q => {
         const badge = q.enabled
@@ -809,7 +844,7 @@ var adminTemplate = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
           '<td>' + q.priority + '</td>' +
           '<td>' + badge + '</td>' +
           '<td style="white-space:nowrap">' +
-            '<button class="btn btn-sm" style="margin-right:6px" onclick="openEdit(' + JSON.stringify(q).replace(/</g,'\\u003c') + ')">编辑</button>' +
+            '<button class="btn btn-sm" style="margin-right:6px" onclick="openEdit(' + q.id + ')">编辑</button>' +
             '<button class="btn btn-sm btn-danger" onclick="deleteQuery(' + q.id + ')">删除</button>' +
           '</td>' +
         '</tr>';
@@ -835,7 +870,9 @@ var adminTemplate = template.Must(template.New("admin").Parse(`<!DOCTYPE html>
       loadQueries();
     }
 
-    function openEdit(q) {
+    function openEdit(id) {
+      const q = queryMap[id];
+      if (!q) return;
       document.getElementById('e-id').value = q.id;
       document.getElementById('e-name').value = q.name;
       document.getElementById('e-query').value = q.query_text;

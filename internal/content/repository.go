@@ -435,7 +435,34 @@ WHERE id = ?
 	return nil
 }
 
-func (r *Repository) ListCleaned(ctx context.Context, limit int) ([]CleanedContent, error) {
+func (r *Repository) HideContent(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE contents SET hidden = 1, updated_at = ? WHERE id = ?`,
+		time.Now(), id,
+	)
+	if err != nil {
+		return fmt.Errorf("隐藏内容失败: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) CountVisible(ctx context.Context) (int, error) {
+	var n int
+	err := r.db.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM contents
+WHERE status = 'cleaned' AND writeworthy_score >= 7 AND hidden = 0`).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("统计可见内容失败: %w", err)
+	}
+	return n, nil
+}
+
+func (r *Repository) ListCleaned(ctx context.Context, page, perPage int) ([]CleanedContent, error) {
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * perPage
+
 	const baseSQL = `
 SELECT
 	id,
@@ -458,15 +485,15 @@ SELECT
 	ai_reason,
 	updated_at
 FROM contents
-WHERE status = 'cleaned'
+WHERE status = 'cleaned' AND writeworthy_score >= 7 AND hidden = 0
 ORDER BY updated_at DESC, id DESC
 `
 
 	sqlText := baseSQL
 	args := []any{}
-	if limit > 0 {
-		sqlText += " LIMIT ?"
-		args = append(args, limit)
+	if perPage > 0 {
+		sqlText += " LIMIT ? OFFSET ?"
+		args = append(args, perPage, offset)
 	}
 
 	rows, err := r.db.QueryContext(ctx, sqlText, args...)
